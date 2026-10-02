@@ -518,7 +518,8 @@ function layout(){
   $("#heroCat").textContent = `${p.brand} · ${p.cat}`;
   $("#heroPrice").textContent = fmt(p.price);
   $("#heroIdx").textContent = `${String(active+1).padStart(2,"0")} / ${String(N).padStart(2,"0")}`;
-  $("#heroBuy").firstChild.textContent = stock(p) ? "Выбрать размер · " : "Sold out · ";
+  $("#heroPrice").hidden = p.price==null;
+  $("#heroBuy").firstChild.textContent = (stock(p) ? "Выбрать размер" : "Sold out") + (p.price==null ? "" : " · ");
 }
 const go = d => { active = (active + d + N) % N; layout(); };
 $("#prev").onclick = () => go(-1); $("#next").onclick = () => go(1);
@@ -543,18 +544,21 @@ function initStory3D(p){
   if(!window.THREE || !p.img || !p.depth) return;
   try{
     const host=$(".piece"), cv=document.createElement("canvas"); cv.className="gl"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
-    const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}); R.setPixelRatio(Math.min(devicePixelRatio,2)); R.outputEncoding=THREE.sRGBEncoding;
+    const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true,preserveDrawingBuffer:true}); R.setPixelRatio(Math.min(devicePixelRatio,2)); R.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,.1,100); cam.position.set(0,0,5.6);
-    const L=new THREE.TextureLoader(), dep=L.load(p.depth), nor=p.normal?L.load(p.normal):null;
+    const mgr=new THREE.LoadingManager(); let failed=false; mgr.onError=()=>{failed=true;};
+    const L=new THREE.TextureLoader(mgr), dep=L.load(p.depth), nor=p.normal?L.load(p.normal):null;
+    const giveUp=()=>{cv.remove(); host.classList.remove("is3d"); s3d=null;};
     const group=new THREE.Group(); scene.add(group);
     scene.add(new THREE.AmbientLight(0xffffff,.8));
     const key=new THREE.DirectionalLight(0xffffff,.75); key.position.set(2,3,4); scene.add(key);
     const fill=new THREE.DirectionalLight(0xffffff,.35); fill.position.set(-3,-1,3); scene.add(fill);
     const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-2,1.5,-4); scene.add(rim);
     const rim2=new THREE.DirectionalLight(0xffffff,.45); rim2.position.set(3,1,-3); scene.add(rim2);
-    L.load(p.img, map=>{
+    const map=L.load(p.img);
+    mgr.onLoad=()=>{ try{ if(failed) return giveUp();
       map.encoding=THREE.sRGBEncoding; map.anisotropy=R.capabilities.getMaxAnisotropy();
-      const ar=map.image.height/map.image.width, w=2.3, h=w*ar, seg=220;
+      const ar=map.image.height/map.image.width, w=2.3, h=w*ar, seg=innerWidth<700?120:200;
       const mk=(flip)=>{
         const g=new THREE.PlaneGeometry(w,h,seg,Math.max(2,Math.round(seg*ar)));
         if(flip){const uv=g.attributes.uv; for(let i=0;i<uv.count;i++) uv.setX(i,1-uv.getX(i));}
@@ -566,6 +570,11 @@ function initStory3D(p){
       const size=()=>{const r=cv.getBoundingClientRect(); R.setSize(r.width,r.height,false); cam.aspect=r.width/r.height; cam.updateProjectionMatrix();};
       addEventListener("resize",size); size();
       s3d={R,scene,cam,group,rim,rim2};
+      /* проверяем, что модель реально нарисовалась; если нет — остаётся обычное фото */
+      group.rotation.set(.08,0,0); R.render(scene,cam);
+      const gl=R.getContext(), W=gl.drawingBufferWidth, H=gl.drawingBufferHeight, px=new Uint8Array(4); let hit=0;
+      for(let gx=1;gx<8;gx++) for(let gy=1;gy<8;gy++){ gl.readPixels(Math.floor(W*gx/8),Math.floor(H*gy/8),1,1,gl.RGBA,gl.UNSIGNED_BYTE,px); if(px[3]>0) hit++; }
+      if(hit<3) return giveUp();
       host.classList.add("is3d");
       const loop=(ts)=>{ requestAnimationFrame(loop); if(document.hidden) return;
         const r=story.getBoundingClientRect(); if(r.bottom<0||r.top>innerHeight) return;
@@ -578,7 +587,7 @@ function initStory3D(p){
         R.render(scene,cam);
       };
       requestAnimationFrame(loop);
-    });
+    }catch(err){ console.warn("3D off",err); giveUp(); } };
     if(!reduce) $("#fit .pin").addEventListener("pointermove",e=>{tilt.x=e.clientX/innerWidth-.5; tilt.y=e.clientY/innerHeight-.5;});
   }catch(e){ console.warn("3D off",e); }
 }
