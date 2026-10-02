@@ -94,6 +94,10 @@ nav.links a:hover{color:var(--ink)}
 .piece .spin{width:100%;height:100%;position:relative;transform-style:preserve-3d;will-change:transform}
 .piece .face{position:absolute;inset:0;backface-visibility:hidden}
 .piece .face.back{transform:rotateY(180deg)}
+.piece{position:relative}
+.piece canvas.gl{position:absolute;inset:-20%;width:140%;height:140%;display:block;opacity:0;transition:opacity .6s}
+.piece.is3d canvas.gl{opacity:1}
+.piece.is3d .spin{visibility:hidden}
 .piece svg,.piece img{width:100%;height:100%;object-fit:contain;overflow:visible;filter:drop-shadow(0 40px 50px rgb(0 0 0 / .7))}
 .copy{position:absolute;left:clamp(16px,6vw,96px);top:50%;transform:translateY(-50%);width:min(380px,40vw)}
 .copy .step{position:absolute;inset:0 auto auto 0;width:100%;opacity:0;transform:translateY(24px);transition:opacity .6s var(--ease),transform .6s var(--ease)}
@@ -384,6 +388,7 @@ form.order input,form.order select,form.order textarea{font:inherit;font-size:1r
 <div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle"></div>
 <div class="toast mono" id="toast" hidden></div>
 
+<script src="js/three.min.js"></script>
 <script>
 /* ============ НАСТРОЙКИ МАГАЗИНА — меняй здесь ============ */
 const SHOP = {
@@ -398,11 +403,11 @@ const SHOP = {
    shape: high / low (кроссовки), hoodie, tee, jacket, beanie, pants. glow — цвет подсветки. */
 const PRODUCTS = [
   {id:"SK-001", name:"Air Jordan 1 Low SE Midnight Navy", brand:"Jordan", cat:"Кроссовки", price:null, shape:"low",
-   img:"img/aj1-low-navy-side.webp", gallery:["img/aj1-low-navy-side.webp","img/aj1-low-navy-front.webp"],
+   img:"img/aj1-low-navy-side.webp", depth:"img/aj1-low-navy-side-depth.png", normal:"img/aj1-low-navy-side-normal.webp", gallery:["img/aj1-low-navy-side.webp","img/aj1-low-navy-front.webp"],
    color:"#1f2a55", trim:"#c8102e", sole:"#f4f2ee", out:"#1f2a55", glow:"#2f4bd8",
    material:"Нубук, кожа", info:"Низкие, Midnight Navy / University Red / White", sizes:null, tag:"В наличии"},
   {id:"SK-002", name:"Air Jordan 1 Low Grey", brand:"Jordan", cat:"Кроссовки", price:null, shape:"low",
-   img:"img/aj1-low-grey-side.webp", gallery:["img/aj1-low-grey-side.webp","img/aj1-low-grey-pair.webp","img/aj1-low-grey-top.webp","img/aj1-low-grey-back.webp"],
+   img:"img/aj1-low-grey-side.webp", depth:"img/aj1-low-grey-side-depth.png", normal:"img/aj1-low-grey-side-normal.webp", gallery:["img/aj1-low-grey-side.webp","img/aj1-low-grey-pair.webp","img/aj1-low-grey-top.webp","img/aj1-low-grey-back.webp"],
    color:"#f4f4f2", trim:"#b9bec6", sole:"#f7f7f5", out:"#bcd6f0", glow:"#8fb3e0",
    material:"Натуральная кожа", info:"Низкие, White / Wolf Grey, ледяная подошва", sizes:null},
 ];
@@ -532,6 +537,52 @@ $("#copy").innerHTML = STORY.steps.map((s,i)=>`<div class="step" data-i="${i}"><
 $("#dots").innerHTML = STORY.steps.map((s,i)=>`<button type="button" data-i="${i}" aria-label="${s.t}">${i+1}</button>`).join("");
 const story = $("#fit"), spin = $("#spin"), steps=[...$("#copy").children], dots=[...$("#dots").children], co=$("#callout");
 let curStep=-1;
+/* объёмный кроссовок: фото + карта глубины → WebGL-модель с двумя сторонами */
+let s3d=null, tilt={x:0,y:0}, sRot=0, sT=0;
+function initStory3D(p){
+  if(!window.THREE || !p.img || !p.depth) return;
+  try{
+    const host=$(".piece"), cv=document.createElement("canvas"); cv.className="gl"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
+    const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true}); R.setPixelRatio(Math.min(devicePixelRatio,2)); R.outputEncoding=THREE.sRGBEncoding;
+    const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,.1,100); cam.position.set(0,0,5.6);
+    const L=new THREE.TextureLoader(), dep=L.load(p.depth), nor=p.normal?L.load(p.normal):null;
+    const group=new THREE.Group(); scene.add(group);
+    scene.add(new THREE.AmbientLight(0xffffff,.8));
+    const key=new THREE.DirectionalLight(0xffffff,.75); key.position.set(2,3,4); scene.add(key);
+    const fill=new THREE.DirectionalLight(0xffffff,.35); fill.position.set(-3,-1,3); scene.add(fill);
+    const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-2,1.5,-4); scene.add(rim);
+    const rim2=new THREE.DirectionalLight(0xffffff,.45); rim2.position.set(3,1,-3); scene.add(rim2);
+    L.load(p.img, map=>{
+      map.encoding=THREE.sRGBEncoding; map.anisotropy=R.capabilities.getMaxAnisotropy();
+      const ar=map.image.height/map.image.width, w=2.3, h=w*ar, seg=220;
+      const mk=(flip)=>{
+        const g=new THREE.PlaneGeometry(w,h,seg,Math.max(2,Math.round(seg*ar)));
+        if(flip){const uv=g.attributes.uv; for(let i=0;i<uv.count;i++) uv.setX(i,1-uv.getX(i));}
+        const m=new THREE.MeshStandardMaterial({map,displacementMap:dep,displacementScale:.34,displacementBias:-.005,alphaMap:dep,alphaTest:.03,roughness:.5,metalness:.04});
+        if(nor){m.normalMap=nor; m.normalScale=new THREE.Vector2(flip?-1:1,1);}
+        const mesh=new THREE.Mesh(g,m); if(flip) mesh.rotation.y=Math.PI; return mesh;
+      };
+      group.add(mk(false), mk(true));
+      const size=()=>{const r=cv.getBoundingClientRect(); R.setSize(r.width,r.height,false); cam.aspect=r.width/r.height; cam.updateProjectionMatrix();};
+      addEventListener("resize",size); size();
+      s3d={R,scene,cam,group,rim,rim2};
+      host.classList.add("is3d");
+      const loop=(ts)=>{ requestAnimationFrame(loop); if(document.hidden) return;
+        const r=story.getBoundingClientRect(); if(r.bottom<0||r.top>innerHeight) return;
+        const idle=reduce?0:Math.sin(ts/1400)*.05;
+        group.rotation.y += ((sRot*Math.PI/180 + tilt.x*.35) - group.rotation.y)*.12;
+        group.rotation.x += ((-tilt.y*.25 + .08) - group.rotation.x)*.12;
+        group.rotation.z = reduce?0:Math.sin(sT*6)*.05;
+        group.position.y = idle + (reduce?0:Math.sin(sT*Math.PI*2)*-.08);
+        const sc=1+Math.sin(sT*Math.PI)*.12; group.scale.set(sc,sc,sc);
+        R.render(scene,cam);
+      };
+      requestAnimationFrame(loop);
+    });
+    if(!reduce) $("#fit .pin").addEventListener("pointermove",e=>{tilt.x=e.clientX/innerWidth-.5; tilt.y=e.clientY/innerHeight-.5;});
+  }catch(e){ console.warn("3D off",e); }
+}
+initStory3D(sp);
 function storyFrame(){
   const r = story.getBoundingClientRect(), total = r.height - innerHeight;
   const t = Math.min(1, Math.max(0, -r.top / total));
@@ -539,12 +590,14 @@ function storyFrame(){
   const lo = Math.floor(f), hi = Math.min(n-1, lo+1), k = f-lo, ease = k*k*(3-2*k);
   const rot = STORY.steps[lo].rot + (STORY.steps[hi].rot - STORY.steps[lo].rot)*ease;
   const scale = 1 + Math.sin(t*Math.PI)*0.12;
+  sRot = reduce ? STORY.steps[i].rot : rot; sT = t;
   spin.style.transform = reduce ? `rotateY(${STORY.steps[i].rot}deg)` : `rotateY(${rot}deg) rotateZ(${Math.sin(t*6)*3}deg) scale(${scale}) translateY(${Math.sin(t*Math.PI*2)*-14}px)`;
   if (i !== curStep){
     curStep = i;
     steps.forEach((s,j)=>s.classList.toggle("on", j===i));
     dots.forEach((d,j)=>d.classList.toggle("on", j===i));
     story.querySelector(".pin").style.setProperty("--sg", STORY.steps[i].glow);
+    if(s3d){ s3d.rim.color.set(STORY.steps[i].glow); s3d.rim2.color.set(STORY.steps[i].glow); }
     co.textContent = STORY.steps[i].callout; co.classList.remove("on"); void co.offsetWidth; co.classList.add("on");
   }
 }
