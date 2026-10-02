@@ -416,12 +416,13 @@ const DEFAULT_SIZES = ["36","37","38","39","40","41","42","43","44","45"];
 /* Сцена «Оригинал» — пара вращается при прокрутке. rot — угол (180 = другая сторона). */
 const STORY = {
   productId: "SK-002",
+  /* view — какое фото из gallery показывать (0 — первое), rot — лёгкий поворот в градусах (до ±25) */
   steps: [
-    {k:"Оригинал", t:"Только оригинал", d:"Каждую пару проверяем перед отправкой: коробка, бирки, швы, стелька. Никаких реплик.", rot:-16, glow:"#8fb3e0", callout:"100% оригинал"},
-    {k:"Фото",     t:"Живые фото пары", d:"Перед оплатой пришлём фото и видео именно вашей пары, а не картинку с сайта.", rot:14, glow:"#3a5bff", callout:"Фото до оплаты"},
-    {k:"Размер",   t:"Подберём размер", d:"Скажите длину стопы в сантиметрах, и мы подскажем размер под конкретную модель.", rot:180, glow:"#c58a3a", callout:"US · EU · см"},
-    {k:"Доставка", t:"По Астане быстро", d:"Курьером по Астане в день заказа или на следующий. По Казахстану отправляем СДЭК.", rot:196, glow:"#3f8a55", callout:"Астана · KZ"},
-    {k:"Под заказ", t:"Нет размера? Привезём", d:"Jordan, Nike, Carhartt под заказ. Напишите модель и размер, срок и цену скажем сразу.", rot:360, glow:"#e0233f", callout:"Под заказ"},
+    {k:"Оригинал", t:"Только оригинал", d:"Каждую пару проверяем перед отправкой: коробка, бирки, швы, стелька. Никаких реплик.", view:0, rot:-18, glow:"#8fb3e0", callout:"100% оригинал"},
+    {k:"Фото",     t:"Живые фото пары", d:"Перед оплатой пришлём фото и видео именно вашей пары, а не картинку с сайта.", view:1, rot:14, glow:"#3a5bff", callout:"Фото до оплаты"},
+    {k:"Размер",   t:"Подберём размер", d:"Скажите длину стопы в сантиметрах, и мы подскажем размер под конкретную модель.", view:2, rot:-10, glow:"#c58a3a", callout:"US · EU · см"},
+    {k:"Доставка", t:"По Астане быстро", d:"Курьером по Астане в день заказа или на следующий. По Казахстану отправляем СДЭК.", view:3, rot:12, glow:"#3f8a55", callout:"Астана · KZ"},
+    {k:"Под заказ", t:"Нет размера? Привезём", d:"Jordan, Nike, Carhartt под заказ. Напишите модель и размер, срок и цену скажем сразу.", view:0, rot:20, glow:"#e0233f", callout:"Под заказ"},
   ],
 };
 /* ========================================================== */
@@ -539,57 +540,62 @@ $("#dots").innerHTML = STORY.steps.map((s,i)=>`<button type="button" data-i="${i
 const story = $("#fit"), spin = $("#spin"), steps=[...$("#copy").children], dots=[...$("#dots").children], co=$("#callout");
 let curStep=-1;
 /* объёмный кроссовок: фото + карта глубины → WebGL-модель с двумя сторонами */
-let s3d=null, tilt={x:0,y:0}, sRot=0, sT=0;
+let s3d=null, tilt={x:0,y:0}, sRot=0, sT=0, sView=0;
+const VIEWS = p => (p.gallery&&p.gallery.length ? p.gallery : [p.img]).map(img=>({img, depth:img.replace(/\.webp$/,"-depth.png"), normal:img.replace(/\.webp$/,"-normal.webp")}));
+const viewOf = i => { const v=VIEWS(sp); return Math.min(STORY.steps[i].view||0, v.length-1); };
 function initStory3D(p){
-  if(!window.THREE || !p.img || !p.depth) return;
+  if(!window.THREE || !p.img) return;
+  const host=$(".piece"), cv=document.createElement("canvas"); cv.className="gl"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
+  const giveUp=()=>{cv.remove(); host.classList.remove("is3d"); s3d=null;};
   try{
-    const host=$(".piece"), cv=document.createElement("canvas"); cv.className="gl"; cv.setAttribute("aria-hidden","true"); host.appendChild(cv);
     const R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true,preserveDrawingBuffer:true}); R.setPixelRatio(Math.min(devicePixelRatio,2)); R.outputEncoding=THREE.sRGBEncoding;
     const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(30,1,.1,100); cam.position.set(0,0,5.6);
     const mgr=new THREE.LoadingManager(); let failed=false; mgr.onError=()=>{failed=true;};
-    const L=new THREE.TextureLoader(mgr), dep=L.load(p.depth), nor=p.normal?L.load(p.normal):null;
-    const giveUp=()=>{cv.remove(); host.classList.remove("is3d"); s3d=null;};
+    const L=new THREE.TextureLoader(mgr);
+    const views=VIEWS(p).map(v=>({map:L.load(v.img), dep:L.load(v.depth), nor:L.load(v.normal)}));
     const group=new THREE.Group(); scene.add(group);
-    scene.add(new THREE.AmbientLight(0xffffff,.8));
-    const key=new THREE.DirectionalLight(0xffffff,.75); key.position.set(2,3,4); scene.add(key);
-    const fill=new THREE.DirectionalLight(0xffffff,.35); fill.position.set(-3,-1,3); scene.add(fill);
-    const rim=new THREE.DirectionalLight(0xffffff,.55); rim.position.set(-2,1.5,-4); scene.add(rim);
-    const rim2=new THREE.DirectionalLight(0xffffff,.45); rim2.position.set(3,1,-3); scene.add(rim2);
-    const map=L.load(p.img);
+    scene.add(new THREE.AmbientLight(0xffffff,.72));
+    const key=new THREE.DirectionalLight(0xffffff,.55); key.position.set(2,3,4); scene.add(key);
+    const fill=new THREE.DirectionalLight(0xffffff,.3); fill.position.set(-3,-1,3); scene.add(fill);
     mgr.onLoad=()=>{ try{ if(failed) return giveUp();
-      map.encoding=THREE.sRGBEncoding; map.anisotropy=R.capabilities.getMaxAnisotropy();
-      const ar=map.image.height/map.image.width, w=2.3, h=w*ar, seg=innerWidth<700?120:200;
-      const mk=(flip)=>{
+      const seg=innerWidth<700?110:180;
+      const meshes=views.map(v=>{
+        v.map.encoding=THREE.sRGBEncoding; v.map.anisotropy=R.capabilities.getMaxAnisotropy();
+        const ar=v.map.image.height/v.map.image.width, w=ar>1?2.3/ar:2.3, h=w*ar;
         const g=new THREE.PlaneGeometry(w,h,seg,Math.max(2,Math.round(seg*ar)));
-        if(flip){const uv=g.attributes.uv; for(let i=0;i<uv.count;i++) uv.setX(i,1-uv.getX(i));}
-        const m=new THREE.MeshStandardMaterial({map,displacementMap:dep,displacementScale:.34,displacementBias:-.005,alphaMap:dep,alphaTest:.03,roughness:.5,metalness:.04});
-        if(nor){m.normalMap=nor; m.normalScale=new THREE.Vector2(flip?-1:1,1);}
-        const mesh=new THREE.Mesh(g,m); if(flip) mesh.rotation.y=Math.PI; return mesh;
-      };
-      group.add(mk(false), mk(true));
+        const m=new THREE.MeshStandardMaterial({map:v.map,displacementMap:v.dep,displacementScale:.22,alphaMap:v.dep,alphaTest:.03,transparent:true,opacity:0,roughness:.55,metalness:0});
+        m.normalMap=v.nor; m.normalScale=new THREE.Vector2(.6,.6);
+        const mesh=new THREE.Mesh(g,m); mesh.visible=false; group.add(mesh); return mesh;
+      });
       const size=()=>{const r=cv.getBoundingClientRect(); R.setSize(r.width,r.height,false); cam.aspect=r.width/r.height; cam.updateProjectionMatrix();};
       addEventListener("resize",size); size();
-      s3d={R,scene,cam,group,rim,rim2};
+      let cur=sView, last=0; meshes[cur].material.opacity=1; meshes[cur].material.transparent=false; meshes[cur].visible=true;
+      s3d={R,scene,cam,group};
       /* проверяем, что модель реально нарисовалась; если нет — остаётся обычное фото */
-      group.rotation.set(.08,0,0); R.render(scene,cam);
+      R.render(scene,cam);
       const gl=R.getContext(), W=gl.drawingBufferWidth, H=gl.drawingBufferHeight, px=new Uint8Array(4); let hit=0;
       for(let gx=1;gx<8;gx++) for(let gy=1;gy<8;gy++){ gl.readPixels(Math.floor(W*gx/8),Math.floor(H*gy/8),1,1,gl.RGBA,gl.UNSIGNED_BYTE,px); if(px[3]>0) hit++; }
       if(hit<3) return giveUp();
       host.classList.add("is3d");
       const loop=(ts)=>{ requestAnimationFrame(loop); if(document.hidden) return;
         const r=story.getBoundingClientRect(); if(r.bottom<0||r.top>innerHeight) return;
-        const idle=reduce?0:Math.sin(ts/1400)*.05;
-        group.rotation.y += ((sRot*Math.PI/180 + tilt.x*.35) - group.rotation.y)*.12;
-        group.rotation.x += ((-tilt.y*.25 + .08) - group.rotation.x)*.12;
-        group.rotation.z = reduce?0:Math.sin(sT*6)*.05;
-        group.position.y = idle + (reduce?0:Math.sin(sT*Math.PI*2)*-.08);
-        const sc=1+Math.sin(sT*Math.PI)*.12; group.scale.set(sc,sc,sc);
+        const dt=Math.min(.05,(ts-(last||ts))/1000); last=ts; const M=meshes[cur].material;
+        if(cur!==sView){ M.opacity-=dt*5; if(M.opacity<=0){ M.opacity=0; meshes[cur].visible=false; cur=sView; meshes[cur].visible=true; meshes[cur].material.opacity=0; } }
+        else if(M.opacity<1) M.opacity=Math.min(1,M.opacity+dt*4);
+        M.transparent = M.opacity<1;
+        const lim=.44; // не дальше ~25°, чтобы не было видно «шва»
+        const ry=Math.max(-lim,Math.min(lim, sRot*Math.PI/180 + tilt.x*.3));
+        group.rotation.y += (ry - group.rotation.y)*.1;
+        group.rotation.x += ((-tilt.y*.2 + .05) - group.rotation.x)*.1;
+        group.rotation.z = reduce?0:Math.sin(sT*6)*.03;
+        group.position.y = (reduce?0:Math.sin(ts/1400)*.05);
+        const sc=1+Math.sin(sT*Math.PI)*.08; group.scale.set(sc,sc,sc);
         R.render(scene,cam);
       };
       requestAnimationFrame(loop);
     }catch(err){ console.warn("3D off",err); giveUp(); } };
     if(!reduce) $("#fit .pin").addEventListener("pointermove",e=>{tilt.x=e.clientX/innerWidth-.5; tilt.y=e.clientY/innerHeight-.5;});
-  }catch(e){ console.warn("3D off",e); }
+  }catch(e){ console.warn("3D off",e); giveUp(); }
 }
 initStory3D(sp);
 function storyFrame(){
@@ -600,13 +606,13 @@ function storyFrame(){
   const rot = STORY.steps[lo].rot + (STORY.steps[hi].rot - STORY.steps[lo].rot)*ease;
   const scale = 1 + Math.sin(t*Math.PI)*0.12;
   sRot = reduce ? STORY.steps[i].rot : rot; sT = t;
+  const v = viewOf(i); if (v !== sView){ sView = v; if(!s3d){ const V=VIEWS(sp)[v]; $("#faceF").innerHTML = pic(sp,V.img,""); } }
   spin.style.transform = reduce ? `rotateY(${STORY.steps[i].rot}deg)` : `rotateY(${rot}deg) rotateZ(${Math.sin(t*6)*3}deg) scale(${scale}) translateY(${Math.sin(t*Math.PI*2)*-14}px)`;
   if (i !== curStep){
     curStep = i;
     steps.forEach((s,j)=>s.classList.toggle("on", j===i));
     dots.forEach((d,j)=>d.classList.toggle("on", j===i));
     story.querySelector(".pin").style.setProperty("--sg", STORY.steps[i].glow);
-    if(s3d){ s3d.rim.color.set(STORY.steps[i].glow); s3d.rim2.color.set(STORY.steps[i].glow); }
     co.textContent = STORY.steps[i].callout; co.classList.remove("on"); void co.offsetWidth; co.classList.add("on");
   }
 }
