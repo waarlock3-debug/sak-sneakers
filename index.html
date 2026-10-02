@@ -402,22 +402,22 @@ const SHOP = {
    img — главное фото без фона, gallery — все ракурсы для карточки товара. Без фото рисуется силуэт.
    shape: high / low (кроссовки), hoodie, tee, jacket, beanie, pants. glow — цвет подсветки. */
 const PRODUCTS = [
-  {id:"SK-001", name:"Air Jordan 1 Low SE Midnight Navy", brand:"Jordan", cat:"Кроссовки", price:null, shape:"low",
-   img:"img/aj1-low-navy-side.webp", depth:"img/aj1-low-navy-side-depth.png", normal:"img/aj1-low-navy-side-normal.webp", gallery:["img/aj1-low-navy-side.webp","img/aj1-low-navy-front.webp"],
-   color:"#1f2a55", trim:"#c8102e", sole:"#f4f2ee", out:"#1f2a55", glow:"#2f4bd8",
-   material:"Нубук, кожа", info:"Низкие, Midnight Navy / University Red / White", sizes:null, tag:"В наличии"},
   {id:"SK-002", name:"Air Jordan 1 Low Grey", brand:"Jordan", cat:"Кроссовки", price:null, shape:"low",
    img:"img/aj1-low-grey-side.webp", depth:"img/aj1-low-grey-side-depth.png", normal:"img/aj1-low-grey-side-normal.webp", gallery:["img/aj1-low-grey-side.webp","img/aj1-low-grey-pair.webp","img/aj1-low-grey-top.webp","img/aj1-low-grey-back.webp"],
    color:"#f4f4f2", trim:"#b9bec6", sole:"#f7f7f5", out:"#bcd6f0", glow:"#8fb3e0",
-   material:"Натуральная кожа", info:"Низкие, White / Wolf Grey, ледяная подошва", sizes:null},
+   material:"Натуральная кожа", info:"Низкие, White / Wolf Grey, ледяная подошва", sizes:null, tag:"Хит"},
+  {id:"SK-001", name:"Air Jordan 1 Low SE Midnight Navy", brand:"Jordan", cat:"Кроссовки", price:null, shape:"low",
+   img:"img/aj1-low-navy-side.webp", depth:"img/aj1-low-navy-side-depth.png", normal:"img/aj1-low-navy-side-normal.webp", gallery:["img/aj1-low-navy-side.webp","img/aj1-low-navy-front.webp"],
+   color:"#1f2a55", trim:"#c8102e", sole:"#f4f2ee", out:"#1f2a55", glow:"#2f4bd8",
+   material:"Нубук, кожа", info:"Низкие, Midnight Navy / University Red / White", sizes:null, tag:"В наличии"}
 ];
 /* sizes:null — размеры не указаны: покупатель выбирает из стандартной сетки, наличие уточняется в WhatsApp. */
 const DEFAULT_SIZES = ["36","37","38","39","40","41","42","43","44","45"];
 /* Сцена «Оригинал» — пара вращается при прокрутке. rot — угол (180 = другая сторона). */
 const STORY = {
-  productId: "SK-001",
+  productId: "SK-002",
   steps: [
-    {k:"Оригинал", t:"Только оригинал", d:"Каждую пару проверяем перед отправкой: коробка, бирки, швы, стелька. Никаких реплик.", rot:-16, glow:"#e0233f", callout:"100% оригинал"},
+    {k:"Оригинал", t:"Только оригинал", d:"Каждую пару проверяем перед отправкой: коробка, бирки, швы, стелька. Никаких реплик.", rot:-16, glow:"#8fb3e0", callout:"100% оригинал"},
     {k:"Фото",     t:"Живые фото пары", d:"Перед оплатой пришлём фото и видео именно вашей пары, а не картинку с сайта.", rot:14, glow:"#3a5bff", callout:"Фото до оплаты"},
     {k:"Размер",   t:"Подберём размер", d:"Скажите длину стопы в сантиметрах, и мы подскажем размер под конкретную модель.", rot:180, glow:"#c58a3a", callout:"US · EU · см"},
     {k:"Доставка", t:"По Астане быстро", d:"Курьером по Астане в день заказа или на следующий. По Казахстану отправляем СДЭК.", rot:196, glow:"#3f8a55", callout:"Астана · KZ"},
